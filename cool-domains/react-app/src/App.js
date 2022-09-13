@@ -3,6 +3,9 @@ import './styles/App.css';
 import twitterLogo from './assets/twitter-logo.svg';
 import { ethers } from "ethers";
 import contractAbi from './utils/contractABI.json';
+import polygonLogo from './assets/polygonlogo.png';
+import ethLogo from './assets/ethlogo.png';
+import { networks } from './utils/networks';
 // Constants
 const TWITTER_HANDLE = '_buildspace';
 const TWITTER_LINK = `https://twitter.com/${TWITTER_HANDLE}`;
@@ -11,29 +14,15 @@ const tld = '.Frog';
 const CONTRACT_ADDRESS = '0x93B18f27aCb211B7Ac6BE7cfbf80380BdB6177AA';
 
 const App = () => {
+	// Create a stateful variable to store the network next to all the others
+	const [network, setNetwork] = useState('');
+
 	const [currentAccount, setCurrentAccount] = useState('');
 	// Add some state data propertie
 	const [domain, setDomain] = useState('');
 	const [record, setRecord] = useState('');
 
-	const connectWallet = async () => {
-		try {
-			const { ethereum } = window;
-
-			if (!ethereum) {
-				alert("Get MetaMask -> https://metamask.io/");
-				return;
-			}
-
-			const accounts = await ethereum.request({ method: "eth_requestAccounts" });
-
-			console.log("Connected", accounts[0]);
-			setCurrentAccount(accounts[0]);
-		} catch (error) {
-			console.log(error)
-		}
-	}
-
+	// Update your checkIfWalletIsConnected function to handle the network
 	const checkIfWalletIsConnected = async () => {
 		const { ethereum } = window;
 
@@ -53,7 +42,78 @@ const App = () => {
 		} else {
 			console.log('No authorized account found');
 		}
+
+		// This is the new part, we check the user's network chain ID
+		const chainId = await ethereum.request({ method: 'eth_chainId' });
+		setNetwork(networks[chainId]);
+
+		ethereum.on('chainChanged', handleChainChanged);
+
+		// Reload the page when they change networks
+		function handleChainChanged(_chainId) {
+			window.location.reload();
+		}
 	};
+
+	const switchNetwork = async () => {
+		if (window.ethereum) {
+			try {
+				// Try to switch to the Mumbai testnet
+				await window.ethereum.request({
+					method: 'wallet_switchEthereumChain',
+					params: [{ chainId: '0x13881' }], // Check networks.js for hexadecimal network ids
+				});
+			} catch (error) {
+				// This error code means that the chain we want has not been added to MetaMask
+				// In this case we ask the user to add it to their MetaMask
+				if (error.code === 4902) {
+					try {
+						await window.ethereum.request({
+							method: 'wallet_addEthereumChain',
+							params: [
+								{
+									chainId: '0x13881',
+									chainName: 'Polygon Mumbai Testnet',
+									rpcUrls: ['https://rpc-mumbai.maticvigil.com/'],
+									nativeCurrency: {
+										name: "Mumbai Matic",
+										symbol: "MATIC",
+										decimals: 18
+									},
+									blockExplorerUrls: ["https://mumbai.polygonscan.com/"]
+								},
+							],
+						});
+					} catch (error) {
+						console.log(error);
+					}
+				}
+				console.log(error);
+			}
+		} else {
+			// If window.ethereum is not found then MetaMask is not installed
+			alert('MetaMask is not installed. Please install it to use this app: https://metamask.io/download.html');
+		}
+	}
+
+
+	const connectWallet = async () => {
+		try {
+			const { ethereum } = window;
+
+			if (!ethereum) {
+				alert("Get MetaMask -> https://metamask.io/");
+				return;
+			}
+
+			const accounts = await ethereum.request({ method: "eth_requestAccounts" });
+
+			console.log("Connected", accounts[0]);
+			setCurrentAccount(accounts[0]);
+		} catch (error) {
+			console.log(error)
+		}
+	}
 
 	const mintDomain = async () => {
 		// Don't run if the domain is empty
@@ -105,7 +165,7 @@ const App = () => {
 	// Render methods
 	const renderNotConnectedContainer = () => (
 		<div className="connect-wallet-container">
-			<img src="https://media.giphy.com/media/3oAt1NiCiTCZrlZvy0/giphy.gif" alt="Frog donut gif" />
+			<img src="https://media.giphy.com/media/11sJmQcnMcMeQM/giphy.gif" alt="Frog donut gif" />
 			{/* Call the connectWallet function we just wrote when the button is clicked */}
 			<button onClick={connectWallet} className="cta-button connect-wallet-button">
 				Connect Wallet
@@ -115,6 +175,18 @@ const App = () => {
 
 	// Form to enter domain name and data
 	const renderInputForm = () => {
+		// If not on Polygon Mumbai Testnet, render the switch button
+		if (network !== 'Polygon Mumbai Testnet') {
+			return (
+				<div className="connect-wallet-container">
+					<h2>Please switch to Polygon Mumbai Testnet</h2>
+					{/* This button will call our switch network function */}
+					<button className='cta-button mint-button' onClick={switchNetwork}>Click here to switch</button>
+				</div>
+			);
+		}
+
+		// The rest of the function remains the same
 		return (
 			<div className="form-container">
 				<div className="first-row">
@@ -158,8 +230,13 @@ const App = () => {
 							<p className="title">🐱‍👤 Frog Name Service</p>
 							<p className="subtitle">Your immortal API on the blockchain!</p>
 						</div>
+						<div className="right">
+							<img alt="Network logo" className="logo" src={network.includes("Polygon") ? polygonLogo : ethLogo} />
+							{currentAccount ? <p> Wallet: {currentAccount.slice(0, 6)}...{currentAccount.slice(-4)} </p> : <p> Not connected </p>}
+						</div>
 					</header>
 				</div>
+
 
 				{!currentAccount && renderNotConnectedContainer()}
 				{/* Render the input form if an account is connected */}
